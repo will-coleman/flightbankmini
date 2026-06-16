@@ -20,7 +20,7 @@ RTL-SDR dongle → dump1090-fa → Python backend → Kivy touchscreen dashboard
 ## Quick install (one command)
 
 ```bash
-git clone https://github.com/will-coleman/adsb-dashboard.git
+git clone https://github.com/will-coleman/flightbankmini.git
 cd adsb-dashboard
 sudo bash scripts/install.sh
 sudo reboot
