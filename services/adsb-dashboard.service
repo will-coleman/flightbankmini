@@ -1,0 +1,30 @@
+[Unit]
+Description=ADS-B Touchscreen Dashboard (Kivy)
+After=graphical.target adsb-backend.service
+Wants=adsb-backend.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/adsb-dashboard/dashboard
+
+# X display — uses the existing X session from autologin
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+Environment=PYTHONUNBUFFERED=1
+Environment=KIVY_NO_ENV_CONFIG=1
+
+ExecStart=/usr/bin/python3 /opt/adsb-dashboard/dashboard/main.py
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=adsb-dashboard
+
+MemoryMax=200M
+CPUQuota=80%
+
+[Install]
+WantedBy=graphical.target

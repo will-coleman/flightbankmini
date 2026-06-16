@@ -1,0 +1,7 @@
+{
+  "ssid": "ADSB-RADAR",
+  "password": "aircraft123",
+  "channel": 6,
+  "interface": "wlan0",
+  "ip": "192.168.4.1"
+}

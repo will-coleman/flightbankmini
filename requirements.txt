@@ -1,0 +1,6 @@
+# ADS-B Dashboard Python Requirements
+# Install with: pip3 install --break-system-packages -r requirements.txt
+
+kivy[base]==2.3.0
+flask==3.0.3
+Werkzeug==3.0.3

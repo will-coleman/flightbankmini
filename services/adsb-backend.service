@@ -1,0 +1,26 @@
+[Unit]
+Description=ADS-B Dashboard Backend API
+After=network.target dump1090-fa.service
+Wants=dump1090-fa.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/adsb-dashboard/backend
+ExecStart=/usr/bin/python3 /opt/adsb-dashboard/backend/adsb_backend.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=adsb-backend
+
+# Resource limits suitable for RPi 3
+MemoryMax=128M
+CPUQuota=50%
+
+Environment=PYTHONUNBUFFERED=1
+Environment=FLASK_ENV=production
+
+[Install]
+WantedBy=multi-user.target

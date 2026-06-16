@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ADS-B RADAR</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="header-left">
+    <span class="brand">ADS-B RADAR</span>
+  </div>
+  <div class="header-center">
+    <span id="clock">--:--:--</span>
+  </div>
+  <div class="header-right">
+    <span class="badge" id="badge-adsb">● ADS-B —</span>
+    <span class="badge" id="badge-count">0 AC</span>
+  </div>
+</header>
+
+<!-- ── Main layout ────────────────────────────────────────────── -->
+<div class="app-body">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span>AIRCRAFT</span>
+      <span id="ac-count-label">0</span>
+    </div>
+
+    <!-- System mini-stats -->
+    <div class="sys-panel">
+      <div class="sys-row"><span>CPU</span><span id="s-cpu">—</span></div>
+      <div class="sys-row"><span>Temp</span><span id="s-temp">—</span></div>
+      <div class="sys-row"><span>RAM</span><span id="s-ram">—</span></div>
+      <div class="sys-row"><span>Msg/s</span><span id="s-rate">—</span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Aircraft list -->
+    <div class="ac-list" id="ac-list">
+      <div class="ac-empty">Waiting for data…</div>
+    </div>
+  </aside>
+
+  <!-- Map -->
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<!-- Aircraft popup template (hidden) -->
+<template id="popup-tmpl">
+  <div class="ac-popup">
+    <div class="popup-callsign"></div>
+    <table class="popup-table">
+      <tr><td>ICAO</td><td class="popup-icao"></td></tr>
+      <tr><td>Altitude</td><td class="popup-alt"></td></tr>
+      <tr><td>Speed</td><td class="popup-spd"></td></tr>
+      <tr><td>Heading</td><td class="popup-hdg"></td></tr>
+      <tr><td>Squawk</td><td class="popup-sqk"></td></tr>
+      <tr><td>RSSI</td><td class="popup-rssi"></td></tr>
+    </table>
+  </div>
+</template>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
