@@ -42,10 +42,10 @@ apt-get install -y -qq \
   lighttpd \
   unzip \
   fonts-liberation \
-  libgl1-mesa-glx \
+  libgl1 \
+  libmtdev1t64 \
   libgles2 \
   libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
-  libmtdev1 \
   xdotool
 
 # ── 3. dump1090-fa ───────────────────────────────────────────────────────
