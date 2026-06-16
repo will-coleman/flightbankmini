@@ -15,6 +15,7 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 INSTALL_DIR="/opt/adsb-dashboard"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
 PI_USER="${SUDO_USER:-pi}"
 
 info "=== ADS-B Dashboard Installer ==="
@@ -48,51 +49,69 @@ apt-get install -y -qq \
   libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
   xdotool
 
-# ── 3. dump1090-fa ───────────────────────────────────────────────────────
-info "Installing dump1090-fa…"
+# ── 3. dump1090-fa (build from source) ───────────────────────────────────
+info "Installing dump1090-fa from source…"
 if ! command -v dump1090-fa &>/dev/null; then
-  # FlightAware repository
-  wget -q -O /tmp/flightaware.gpg \
-    https://flightaware.com/adsb/piaware/files/packages/pool/piaware/f/flightaware-apt-repository/flightaware-apt-repository_1.1_all.deb
-  dpkg -i /tmp/flightaware.gpg 2>/dev/null || true
-  apt-get update -qq
-  apt-get install -y -qq dump1090-fa || {
-    warn "FlightAware repo failed, trying alternative build…"
-    apt-get install -y -qq dump1090-mutability || true
-  }
+  apt-get install -y -qq \
+    build-essential \
+    debhelper \
+    libusb-1.0-0-dev \
+    pkg-config \
+    libncurses-dev
+
+  DUMP1090_SRC="/tmp/dump1090"
+  rm -rf "$DUMP1090_SRC"
+  git clone --depth 1 https://github.com/flightaware/dump1090.git "$DUMP1090_SRC"
+  cd "$DUMP1090_SRC"
+  make BLADERF=no HACKRF=no LIMESDR=no
+  cp dump1090 /usr/local/bin/dump1090-fa
+  cp view1090 /usr/local/bin/view1090 2>/dev/null || true
+  mkdir -p /usr/share/dump1090-fa/html
+  cp -r public_html/* /usr/share/dump1090-fa/html/ 2>/dev/null || true
+  cd /
+  rm -rf "$DUMP1090_SRC"
+  info "dump1090-fa built and installed."
 else
   info "dump1090-fa already installed."
 fi
 
 # ── 4. Python dependencies ───────────────────────────────────────────────
-info "Installing Python packages…"
+info "Creating swap file to prevent OOM during Kivy build…"
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+fi
+swapon /swapfile 2>/dev/null || true
+
+info "Installing Python packages (Kivy will compile — takes ~15 mins)…"
 pip3 install --break-system-packages \
-  kivy[base]==2.3.0 \
+  "kivy[base]" \
   flask \
   requests
 
 # ── 5. Deploy application files ──────────────────────────────────────────
 info "Deploying application…"
 mkdir -p "$INSTALL_DIR"
-cp -r "$SCRIPT_DIR/dashboard" "$INSTALL_DIR/"
-cp -r "$SCRIPT_DIR/backend"   "$INSTALL_DIR/"
-cp -r "$SCRIPT_DIR/web"       "$INSTALL_DIR/"
-cp -r "$SCRIPT_DIR/config"    "$INSTALL_DIR/"
+cp -r "$REPO_DIR/dashboard" "$INSTALL_DIR/"
+cp -r "$REPO_DIR/backend"   "$INSTALL_DIR/"
+cp -r "$REPO_DIR/web"       "$INSTALL_DIR/"
+cp -r "$REPO_DIR/config"    "$INSTALL_DIR/"
 
 chown -R "$PI_USER:$PI_USER" "$INSTALL_DIR"
 
 # ── 6. Systemd services ───────────────────────────────────────────────────
 info "Installing systemd services…"
-cp "$SCRIPT_DIR/services/dump1090-fa.service"  /etc/systemd/system/
-cp "$SCRIPT_DIR/services/adsb-backend.service" /etc/systemd/system/
-cp "$SCRIPT_DIR/services/adsb-dashboard.service" /etc/systemd/system/
+cp "$REPO_DIR/services/dump1090-fa.service"    /etc/systemd/system/
+cp "$REPO_DIR/services/adsb-backend.service"   /etc/systemd/system/
+cp "$REPO_DIR/services/adsb-dashboard.service" /etc/systemd/system/
 
 systemctl daemon-reload
 systemctl enable dump1090-fa
 systemctl enable adsb-backend
 systemctl enable adsb-dashboard
 
-# ── 7. Autologin + auto-start X ─────────────────────────────────────────
+# ── 7. Autologin + auto-start X ──────────────────────────────────────────
 info "Configuring autologin…"
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
@@ -101,7 +120,6 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin $PI_USER --noclear %I \$TERM
 EOF
 
-# .bash_profile launches X on login if not already running
 BASH_PROFILE="/home/$PI_USER/.bash_profile"
 if ! grep -q 'startx' "$BASH_PROFILE" 2>/dev/null; then
   cat >> "$BASH_PROFILE" <<'EOF'
@@ -113,7 +131,6 @@ fi
 EOF
 fi
 
-# Openbox autostart — launches dashboard instead of a desktop
 mkdir -p "/home/$PI_USER/.config/openbox"
 cat > "/home/$PI_USER/.config/openbox/autostart" <<'EOF'
 # Disable screen blanking
@@ -129,7 +146,6 @@ python3 /opt/adsb-dashboard/dashboard/main.py &
 EOF
 chown -R "$PI_USER:$PI_USER" "/home/$PI_USER/.config"
 
-# .xinitrc — start openbox
 cat > "/home/$PI_USER/.xinitrc" <<'EOF'
 exec openbox-session
 EOF
@@ -143,7 +159,7 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", GROUP="plug
 EOF
 usermod -aG plugdev "$PI_USER"
 
-# ── 9. Blacklist DVB kernel module (conflicts with RTL-SDR) ─────────────
+# ── 9. Blacklist DVB kernel module (conflicts with RTL-SDR) ──────────────
 info "Blacklisting DVB kernel modules…"
 cat > /etc/modprobe.d/rtlsdr-blacklist.conf <<'EOF'
 blacklist dvb_usb_rtl28xxu
@@ -151,21 +167,20 @@ blacklist rtl2832
 blacklist rtl2830
 EOF
 
-# ── 10. GPU memory split for Pi 3 ───────────────────────────────────────
+# ── 10. GPU memory split for Pi 3 ────────────────────────────────────────
 info "Setting GPU memory split…"
 if ! grep -q 'gpu_mem' /boot/config.txt 2>/dev/null; then
   echo 'gpu_mem=128' >> /boot/config.txt
 fi
-# Force HDMI even without display attached
 if ! grep -q 'hdmi_force_hotplug' /boot/config.txt 2>/dev/null; then
   echo 'hdmi_force_hotplug=1' >> /boot/config.txt
 fi
 
-# ── 11. Touchscreen permissions ──────────────────────────────────────────
+# ── 11. Touchscreen permissions ───────────────────────────────────────────
 usermod -aG input "$PI_USER"
 usermod -aG video "$PI_USER"
 
-# ── 12. Default hotspot config ───────────────────────────────────────────
+# ── 12. Default hotspot config ────────────────────────────────────────────
 mkdir -p "$INSTALL_DIR/config"
 if [ ! -f "$INSTALL_DIR/config/hotspot.json" ]; then
   cat > "$INSTALL_DIR/config/hotspot.json" <<'EOF'
@@ -180,7 +195,7 @@ EOF
 fi
 chown "$PI_USER:$PI_USER" "$INSTALL_DIR/config/hotspot.json"
 
-# ── Done ─────────────────────────────────────────────────────────────────
+# ── Done ──────────────────────────────────────────────────────────────────
 echo ""
 info "=========================================="
 info " Installation complete!"
