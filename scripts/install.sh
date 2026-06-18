@@ -261,6 +261,27 @@ proxy.server = ( "" => (( "host" => "127.0.0.1", "port" => 5000 )) )
 EOF
 systemctl enable lighttpd
 
+# ── 15. Offline map tiles ────────────────────────────────────────────────
+# The hotspot has no internet, so devices viewing the map can't reach
+# OpenStreetMap. Download the tiles now (only works if the Pi itself has
+# internet at install time, e.g. via Ethernet). Safe to skip — you can run
+# scripts/download_tiles.py later.
+info "Downloading offline map tiles…"
+TILE_DIR="$INSTALL_DIR/web/static/tiles"
+if [ ! -f "$TILE_DIR/blank.png" ]; then
+  if curl -sf -m 5 https://tile.openstreetmap.org/0/0/0.png -o /dev/null; then
+    python3 "$REPO_DIR/scripts/download_tiles.py" "$TILE_DIR" || \
+      warn "Tile download failed — run scripts/download_tiles.py later."
+    chown -R "$PI_USER:$PI_USER" "$TILE_DIR"
+  else
+    warn "No internet — skipping map tiles."
+    warn "Run later (with the Pi online):"
+    warn "  python3 $REPO_DIR/scripts/download_tiles.py $TILE_DIR"
+  fi
+else
+  info "Map tiles already present."
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────
 echo ""
 info "=========================================="
