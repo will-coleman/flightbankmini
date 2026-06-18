@@ -24,7 +24,9 @@ BASE_DIR   = Path('/opt/adsb-dashboard')
 WEB_DIR    = BASE_DIR / 'web'
 STATIC_DIR = WEB_DIR / 'static'
 
-DUMP1090_URL  = 'http://127.0.0.1:30080/data/aircraft.json'
+# Primary: dump1090 HTTP API (if available)
+# Fallback: JSON file written by --write-json flag
+DUMP1090_URL  = 'http://127.0.0.1:8080/data/aircraft.json'
 DUMP1090_FILE = '/run/dump1090-fa/aircraft.json'
 
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path='/static')
@@ -32,19 +34,19 @@ app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path='/static')
 # ── In-memory state updated by background thread ───────────────────────────
 _state_lock = threading.Lock()
 _state = {
-    'aircraft':        [],
-    'aircraft_total':  0,
+    'aircraft':          [],
+    'aircraft_total':    0,
     'aircraft_with_pos': 0,
-    'messages_rate':   0.0,
-    'messages_total':  0,
-    'last_updated':    None,
-    'dump1090_ok':     False,
+    'messages_rate':     0.0,
+    'messages_total':    0,
+    'last_updated':      None,
+    'dump1090_ok':       False,
 }
 
 # ── dump1090 poller ────────────────────────────────────────────────────────
 
 def _read_dump1090():
-    """Try HTTP then file. Returns raw dict or None."""
+    """Try HTTP API then fall back to JSON file written by --write-json."""
     try:
         req = urllib.request.Request(DUMP1090_URL,
                                      headers={'Accept': 'application/json'})
@@ -86,35 +88,35 @@ def _poll_loop():
                 normalised = []
                 for a in fresh:
                     normalised.append({
-                        'icao':     a.get('hex', '').upper(),
-                        'callsign': (a.get('flight') or '').strip(),
-                        'lat':      a.get('lat'),
-                        'lon':      a.get('lon'),
-                        'altitude': _safe_int(a.get('alt_baro') or a.get('altitude')),
-                        'speed':    a.get('gs') or a.get('speed'),
-                        'heading':  a.get('track') or a.get('heading'),
+                        'icao':      a.get('hex', '').upper(),
+                        'callsign':  (a.get('flight') or '').strip(),
+                        'lat':       a.get('lat'),
+                        'lon':       a.get('lon'),
+                        'altitude':  _safe_int(a.get('alt_baro') or a.get('altitude')),
+                        'speed':     a.get('gs') or a.get('speed'),
+                        'heading':   a.get('track') or a.get('heading'),
                         'vert_rate': _safe_int(a.get('baro_rate') or a.get('vert_rate')),
-                        'squawk':   a.get('squawk', ''),
-                        'rssi':     a.get('rssi'),
-                        'seen':     a.get('seen', 0),
-                        'messages': a.get('messages', 0),
+                        'squawk':    a.get('squawk', ''),
+                        'rssi':      a.get('rssi'),
+                        'seen':      a.get('seen', 0),
+                        'messages':  a.get('messages', 0),
                     })
 
                 with_pos = sum(1 for a in normalised
                                if a['lat'] is not None and a['lon'] is not None)
 
                 with _state_lock:
-                    _state['aircraft']         = normalised
-                    _state['aircraft_total']   = len(normalised)
-                    _state['aircraft_with_pos'] = with_pos
-                    _state['messages_rate']    = round(max(rate, 0.0), 1)
-                    _state['messages_total']   = total_msgs
-                    _state['last_updated']     = datetime.utcnow().isoformat() + 'Z'
-                    _state['dump1090_ok']      = True
+                    _state['aircraft']           = normalised
+                    _state['aircraft_total']     = len(normalised)
+                    _state['aircraft_with_pos']  = with_pos
+                    _state['messages_rate']      = round(max(rate, 0.0), 1)
+                    _state['messages_total']     = total_msgs
+                    _state['last_updated']       = datetime.utcnow().isoformat() + 'Z'
+                    _state['dump1090_ok']        = True
             else:
                 with _state_lock:
                     _state['dump1090_ok'] = False
-        except Exception as e:
+        except Exception:
             with _state_lock:
                 _state['dump1090_ok'] = False
 
@@ -161,8 +163,7 @@ def _get_system_metrics():
         with open('/proc/uptime') as f:
             secs = int(float(f.read().split()[0]))
         metrics['uptime_seconds'] = secs
-        h, m = divmod(secs // 60, 60)
-        metrics['uptime_str'] = f"{secs//3600:02d}h {(secs%3600)//60:02d}m"
+        metrics['uptime_str']     = f"{secs//3600:02d}h {(secs%3600)//60:02d}m"
     except Exception:
         metrics['uptime_seconds'] = 0
         metrics['uptime_str']     = '—'
@@ -236,7 +237,6 @@ def api_health():
 # ── Entry point ────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    # Start background poller
     t = threading.Thread(target=_poll_loop, daemon=True)
     t.start()
 
