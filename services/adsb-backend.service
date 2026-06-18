@@ -9,18 +9,12 @@ User=pi
 Group=pi
 WorkingDirectory=/opt/adsb-dashboard/backend
 ExecStart=/usr/bin/python3 /opt/adsb-dashboard/backend/adsb_backend.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=adsb-backend
-
-# Resource limits suitable for RPi 3
-MemoryMax=128M
-CPUQuota=50%
-
 Environment=PYTHONUNBUFFERED=1
-Environment=FLASK_ENV=production
 
 [Install]
 WantedBy=multi-user.target
