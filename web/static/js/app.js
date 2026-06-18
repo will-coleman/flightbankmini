@@ -2,6 +2,9 @@
  * ADS-B RADAR  —  Web Frontend
  * Leaflet map with live aircraft positions from /api/aircraft
  * Refresh: 1 second
+ *
+ * Map tiles are served LOCALLY from /static/tiles (offline — no internet
+ * needed). Download them first with scripts/download_tiles.py.
  */
 
 'use strict';
@@ -17,6 +20,10 @@ const DEFAULT_LAT = 51.477;
 const DEFAULT_LON = -0.461;
 const DEFAULT_ZOOM = 8;
 
+// Must match the zoom range downloaded by download_tiles.py
+const MIN_ZOOM = 6;
+const MAX_ZOOM = 11;
+
 // ── State ───────────────────────────────────────────────────────────────
 const markers = {};          // icao → { marker, label }
 let selectedIcao = null;
@@ -26,13 +33,19 @@ let mapCentred   = false;
 const map = L.map('map', {
   center:          [DEFAULT_LAT, DEFAULT_LON],
   zoom:            DEFAULT_ZOOM,
+  minZoom:         MIN_ZOOM,
+  maxZoom:         MAX_ZOOM,
   zoomControl:     true,
   attributionControl: true,
 });
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  maxZoom: 18,
+// Local offline tiles. errorTileUrl keeps missing tiles from showing
+// broken-image icons.
+L.tileLayer('/static/tiles/{z}/{x}/{y}.png', {
+  attribution:  '© OpenStreetMap contributors',
+  minZoom:      MIN_ZOOM,
+  maxZoom:      MAX_ZOOM,
+  errorTileUrl: '/static/tiles/blank.png',
 }).addTo(map);
 
 // ── Aircraft SVG icon ────────────────────────────────────────────────────
