@@ -35,9 +35,15 @@ apt-get install -y -qq \
   git curl wget \
   rtl-sdr \
   librtlsdr-dev \
+  build-essential \
+  libusb-1.0-0-dev \
+  pkg-config \
+  libncurses-dev \
+  debhelper \
   chromium-browser \
   xorg xinit x11-xserver-utils \
   openbox \
+  unclutter \
   network-manager \
   hostapd dnsmasq \
   lighttpd \
@@ -52,13 +58,6 @@ apt-get install -y -qq \
 # ── 3. dump1090-fa (build from source) ───────────────────────────────────
 info "Installing dump1090-fa from source…"
 if ! command -v dump1090-fa &>/dev/null; then
-  apt-get install -y -qq \
-    build-essential \
-    debhelper \
-    libusb-1.0-0-dev \
-    pkg-config \
-    libncurses-dev
-
   DUMP1090_SRC="/tmp/dump1090"
   rm -rf "$DUMP1090_SRC"
   git clone --depth 1 https://github.com/flightaware/dump1090.git "$DUMP1090_SRC"
@@ -75,6 +74,10 @@ else
   info "dump1090-fa already installed."
 fi
 
+# Runtime directory for JSON output (persists across service restarts)
+mkdir -p /run/dump1090-fa
+chown "$PI_USER:$PI_USER" /run/dump1090-fa
+
 # ── 4. Python dependencies ───────────────────────────────────────────────
 info "Creating swap file to prevent OOM during Kivy build…"
 if [ ! -f /swapfile ]; then
@@ -84,7 +87,7 @@ if [ ! -f /swapfile ]; then
 fi
 swapon /swapfile 2>/dev/null || true
 
-info "Installing Python packages (Kivy will compile — takes ~15 mins)…"
+info "Installing Python packages (Kivy will compile — takes ~15 mins on Pi 3)…"
 pip3 install --break-system-packages \
   "kivy[base]" \
   flask \
@@ -159,7 +162,7 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", GROUP="plug
 EOF
 usermod -aG plugdev "$PI_USER"
 
-# ── 9. Blacklist DVB kernel module (conflicts with RTL-SDR) ──────────────
+# ── 9. Blacklist DVB kernel module ────────────────────────────────────────
 info "Blacklisting DVB kernel modules…"
 cat > /etc/modprobe.d/rtlsdr-blacklist.conf <<'EOF'
 blacklist dvb_usb_rtl28xxu
@@ -183,6 +186,7 @@ usermod -aG video "$PI_USER"
 # ── 12. Default hotspot config ────────────────────────────────────────────
 mkdir -p "$INSTALL_DIR/config"
 if [ ! -f "$INSTALL_DIR/config/hotspot.json" ]; then
+  cp "$REPO_DIR/config/hotspot.json.example" "$INSTALL_DIR/config/hotspot.json" 2>/dev/null || \
   cat > "$INSTALL_DIR/config/hotspot.json" <<'EOF'
 {
   "ssid": "ADSB-RADAR",
@@ -194,6 +198,68 @@ if [ ! -f "$INSTALL_DIR/config/hotspot.json" ]; then
 EOF
 fi
 chown "$PI_USER:$PI_USER" "$INSTALL_DIR/config/hotspot.json"
+
+# ── 13. WiFi / hotspot setup ──────────────────────────────────────────────
+info "Configuring WiFi hotspot…"
+
+# Tell NetworkManager to leave wlan0 alone so hostapd can control it
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/unmanaged.conf <<'EOF'
+[keyfile]
+unmanaged-devices=interface-name:wlan0
+EOF
+
+# Disable power management on other interfaces
+cat > /etc/NetworkManager/conf.d/wifi-powersave-off.conf <<'EOF'
+[connection]
+wifi.powersave = 2
+EOF
+
+# hostapd config
+systemctl unmask hostapd
+cat > /etc/hostapd/hostapd.conf <<'EOF'
+interface=wlan0
+ssid=ADSB-RADAR
+hw_mode=g
+channel=6
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=aircraft123
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+EOF
+
+sed -i 's|^#\?DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
+systemctl enable hostapd
+
+# dnsmasq — DHCP for hotspot clients
+cat > /etc/dnsmasq.conf <<'EOF'
+interface=wlan0
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+domain=local
+EOF
+systemctl enable dnsmasq
+
+# Static IP for wlan0 via systemd-networkd
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/10-wlan0-hotspot.network <<'EOF'
+[Match]
+Name=wlan0
+
+[Network]
+Address=192.168.4.1/24
+EOF
+systemctl enable systemd-networkd
+
+# ── 14. lighttpd reverse proxy → Flask on port 5000 ──────────────────────
+info "Configuring lighttpd reverse proxy…"
+lighty-enable-mod proxy 2>/dev/null || true
+cat > /etc/lighttpd/conf-enabled/10-proxy.conf <<'EOF'
+server.modules += ( "mod_proxy" )
+proxy.server = ( "" => (( "host" => "127.0.0.1", "port" => 5000 )) )
+EOF
+systemctl enable lighttpd
 
 # ── Done ──────────────────────────────────────────────────────────────────
 echo ""
