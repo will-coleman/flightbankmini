@@ -90,7 +90,6 @@ swapon /swapfile 2>/dev/null || true
 info "Installing Python packages (Kivy will compile — takes ~15 mins on Pi 3)…"
 pip3 install --break-system-packages \
   "kivy[base]" \
-  kivy_garden.mapview \
   flask \
   requests
 
