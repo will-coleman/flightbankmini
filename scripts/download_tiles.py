@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-download_tiles.py — Fetch OpenStreetMap tiles for OFFLINE use.
+download_tiles.py — Fetch map tiles for OFFLINE use.
 
-Run this ONCE, on a machine that HAS internet (e.g. the Pi with an
-Ethernet cable plugged in, or your Mac). It saves tiles as
-  <out_dir>/{z}/{x}/{y}.png
-which Leaflet then loads locally with no internet needed.
+Uses Geoapify, whose tile policy explicitly permits caching/storing tiles
+offline (unlike OpenStreetMap's public servers, which block bulk pulls).
 
-Usage:
-  python3 download_tiles.py [output_dir]
+  1. Get a FREE API key at https://www.geoapify.com/  (no card needed)
+  2. Paste it into GEOAPIFY_KEY below.
+  3. Run this ONCE on a machine with internet (your Mac is easiest):
+         python3 download_tiles.py ./tiles
+     then copy the folder to the Pi (see README / chat for scp command).
+     Or run it on the Pi itself if it has internet (Ethernet).
 
-If output_dir is omitted it writes to ../web/static/tiles relative to
-this script (the repo copy). On the Pi you usually want:
-  python3 download_tiles.py /opt/adsb-dashboard/web/static/tiles
+Tiles are saved as  <out_dir>/{z}/{x}/{y}.png  and served by Leaflet at
+/static/tiles/{z}/{x}/{y}.png — no internet needed when viewing.
 """
 
 import math
@@ -21,8 +22,15 @@ import sys
 import time
 import urllib.request
 
-# ── Coverage area — southern England / ADS-B reception range ──────────────
-# Widen/narrow these if you want more or fewer tiles.
+# -- Geoapify API key ------------------------------------------------------
+# Free key from https://www.geoapify.com/  ->  create a project  ->  copy key.
+GEOAPIFY_KEY = 'f1e8902f310d47f68d277c8f138867dd'
+
+# Map style. Options: osm-bright, osm-carto, klokantech-basic,
+# positron, dark-matter, toner. 'osm-bright' is a good general-purpose look.
+STYLE = 'osm-bright'
+
+# -- Coverage area — southern England / ADS-B reception range --------------
 NORTH =  53.2
 SOUTH =  49.3
 WEST  =  -3.8
@@ -31,12 +39,13 @@ EAST  =   2.2
 MIN_ZOOM = 6     # wide regional view
 MAX_ZOOM = 11    # close enough to see individual towns
 
-# ── Tile source ───────────────────────────────────────────────────────────
-TILE_URL   = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+# -- Tile source -----------------------------------------------------------
+TILE_URL = ('https://maps.geoapify.com/v1/tile/' + STYLE +
+            '/{z}/{x}/{y}.png?apiKey=' + GEOAPIFY_KEY)
 USER_AGENT = 'FBRadarMINI-offline-tiles/1.0 (personal ADS-B appliance)'
-DELAY      = 0.15   # polite gap between requests (seconds)
+DELAY = 0.05
 
-# Output directory
+# -- Output directory ------------------------------------------------------
 if len(sys.argv) > 1:
     OUT_DIR = sys.argv[1]
 else:
@@ -65,8 +74,14 @@ def build_jobs():
 
 
 def main():
+    if GEOAPIFY_KEY == 'YOUR_KEY_HERE' or not GEOAPIFY_KEY.strip():
+        print("ERROR: set GEOAPIFY_KEY near the top of this file first.")
+        print("Get a free key at https://www.geoapify.com/")
+        sys.exit(1)
+
     jobs = build_jobs()
     print(f"Output dir : {OUT_DIR}")
+    print(f"Style      : {STYLE}")
     print(f"Tiles to fetch: {len(jobs)} (zoom {MIN_ZOOM}-{MAX_ZOOM})")
     os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -114,3 +129,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
