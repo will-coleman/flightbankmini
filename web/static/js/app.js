@@ -42,7 +42,7 @@ const map = L.map('map', {
 // Local offline tiles. errorTileUrl keeps missing tiles from showing
 // broken-image icons.
 L.tileLayer('/static/tiles/{z}/{x}/{y}.png', {
-  attribution:  '© OpenStreetMap contributors',
+  attribution:  'Powered by <a href="https://www.geoapify.com/">Geoapify</a> | © OpenStreetMap contributors',
   minZoom:      MIN_ZOOM,
   maxZoom:      MAX_ZOOM,
   errorTileUrl: '/static/tiles/blank.png',
